@@ -79,8 +79,8 @@ contract Exchange is Ownable {
   ) external onlyOwner {
     require(startTime > block.timestamp, "Invalid Start");
     Game memory game = Game(team1, team2, series, startTime, startTime + 4 hours, false, false);
-    games[gameCounter] = game;
     gameCounter++;
+    games[gameCounter] = game;
   }
 
   function endGame(uint64 gameId, bool result) external onlyOwner {
