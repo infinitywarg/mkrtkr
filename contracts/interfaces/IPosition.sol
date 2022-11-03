@@ -13,6 +13,6 @@ interface IPosition is IERC1155 {
   function burn(
     address account,
     uint256 id,
-    uint256 value
+    uint256 amount
   ) external returns (bool success);
 }

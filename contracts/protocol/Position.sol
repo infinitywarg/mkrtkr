@@ -29,9 +29,9 @@ contract Position is IPosition, ERC1155 {
   function burn(
     address account,
     uint256 id,
-    uint256 value
+    uint256 amount
   ) external onlyPool returns (bool success) {
-    _burn(account, id, value);
+    _burn(account, id, amount);
     success = true;
   }
 
