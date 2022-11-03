@@ -6,7 +6,7 @@ import "../interfaces/IPosition.sol";
 
 contract Position is IPosition, ERC1155 {
   address public immutable pool;
-  mapping(uint256 => uint256) public supply;
+  mapping(uint256 => uint256) private supply;
 
   constructor(address _pool) ERC1155("") {
     pool = _pool;
@@ -33,6 +33,10 @@ contract Position is IPosition, ERC1155 {
   ) external onlyPool returns (bool success) {
     _burn(account, id, amount);
     success = true;
+  }
+
+  function totalSupply(uint256 id) external view returns (uint256 amount) {
+    return supply[id];
   }
 
   // The following functions are overrides required by Solidity.

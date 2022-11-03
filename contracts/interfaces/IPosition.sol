@@ -15,4 +15,6 @@ interface IPosition is IERC1155 {
     uint256 id,
     uint256 amount
   ) external returns (bool success);
+
+  function totalSupply(uint256 id) external view returns (uint256 amount);
 }
