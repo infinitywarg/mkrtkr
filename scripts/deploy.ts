@@ -1,23 +1,35 @@
 import { ethers } from "hardhat";
 
 async function main() {
-  const currentTimestampInSeconds = Math.round(Date.now() / 1000);
-  const ONE_YEAR_IN_SECS = 365 * 24 * 60 * 60;
-  const unlockTime = currentTimestampInSeconds + ONE_YEAR_IN_SECS;
+	console.log(`Deployment started!`);
+	const [deployer] = await ethers.getSigners();
+	console.log(`Deploying contracts with: ${deployer.address}`);
 
-  const lockedAmount = ethers.utils.parseEther("1");
+	console.log(`Deploying Cash contract`);
+	const Cash = await ethers.getContractFactory("Cash", deployer);
+	const cash = await Cash.deploy();
+	await cash.deployed();
+	console.log(`Cash contract deployed to ${cash.address}`);
 
-  const Lock = await ethers.getContractFactory("Lock");
-  const lock = await Lock.deploy(unlockTime, { value: lockedAmount });
+	console.log(`Deploying Exchange contract`);
+	const Exchange = await ethers.getContractFactory("Exchange", deployer);
+	const exchange = await Exchange.deploy();
+	await exchange.deployed();
+	console.log(`Exchange contract deployed to ${exchange.address}`);
 
-  await lock.deployed();
+	console.log(`Deploying Position contract`);
+	const Position = await ethers.getContractFactory("Position", deployer);
+	const position = await Position.deploy(exchange.address);
+	await position.deployed();
+	console.log(`Position contract deployed to ${position.address}`);
 
-  console.log(`Lock with 1 ETH and unlock timestamp ${unlockTime} deployed to ${lock.address}`);
+	console.log(`Initialize Exchange contract`);
+	const initializeTx = await exchange.connect(deployer).initialize(position.address, cash.address);
+	initializeTx.wait();
+	console.log(`Initialize Exchange contract complete`);
 }
 
-// We recommend this pattern to be able to use async/await everywhere
-// and properly handle errors.
 main().catch((error) => {
-  console.error(error);
-  process.exitCode = 1;
+	console.error(error);
+	process.exitCode = 1;
 });
