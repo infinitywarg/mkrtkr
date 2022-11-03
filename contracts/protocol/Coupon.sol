@@ -2,9 +2,9 @@
 pragma solidity ^0.8.9;
 
 import "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
-import "../interfaces/IPosition.sol";
+import "../interfaces/ICoupon.sol";
 
-contract Position is IPosition, ERC1155 {
+contract Coupon is ICoupon, ERC1155 {
   address public immutable pool;
   mapping(uint256 => uint256) private supply;
 
