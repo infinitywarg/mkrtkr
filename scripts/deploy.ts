@@ -17,14 +17,14 @@ async function main() {
 	await exchange.deployed();
 	console.log(`Exchange contract deployed to ${exchange.address}`);
 
-	console.log(`Deploying Position contract`);
-	const Position = await ethers.getContractFactory("Position", deployer);
-	const position = await Position.deploy(exchange.address);
-	await position.deployed();
-	console.log(`Position contract deployed to ${position.address}`);
+	console.log(`Deploying Coupon contract`);
+	const Coupon = await ethers.getContractFactory("Coupon", deployer);
+	const coupon = await Coupon.deploy(exchange.address);
+	await coupon.deployed();
+	console.log(`Coupon contract deployed to ${coupon.address}`);
 
 	console.log(`Initialize Exchange contract`);
-	const initializeTx = await exchange.connect(deployer).initialize(position.address, cash.address);
+	const initializeTx = await exchange.connect(deployer).initialize(coupon.address, cash.address);
 	initializeTx.wait();
 	console.log(`Initialize Exchange contract complete`);
 }
