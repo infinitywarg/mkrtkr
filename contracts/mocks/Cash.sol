@@ -6,15 +6,13 @@ import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 contract Cash is ERC20 {
   mapping(address => uint256) public lastDrop;
 
-  constructor() ERC20("MkrTkr", "MKTK") {
-    _mint(address(this), 1000000000000 * 10**decimals());
-  }
+  constructor() ERC20("MkrTkr", "MKTK") {}
 
   function faucet(uint256 amount) external {
-    require(amount <= 1000 * 10**decimals(), "Dont be Greedy");
+    // require(amount <= 10000 * 10**decimals(), "Dont be Greedy");
     // require(block.timestamp - lastDrop[msg.sender] >= 3 hours, "Let it Cool");
     lastDrop[msg.sender] = block.timestamp;
-    _transfer(address(this), msg.sender, amount);
+    _mint(msg.sender, amount);
   }
 
   function decimals() public pure override returns (uint8) {
