@@ -31,6 +31,7 @@ contract Exchange is Ownable {
   ICoupon private coupon;
   IERC20 private cash;
   uint256 public gameCounter;
+  bool public initialized;
 
   // from gameId
   mapping(uint256 => Game) public games;
@@ -39,9 +40,15 @@ contract Exchange is Ownable {
   mapping(uint256 => uint256) public takerBalance;
   mapping(uint256 => uint256) public matchedValue;
 
+  modifier whenInitialized() {
+    require(initialized, "Not Initialized");
+    _;
+  }
+
   function initialize(address _coupon, address _cash) external onlyOwner {
     coupon = ICoupon(_coupon);
     cash = IERC20(_cash);
+    initialized = true;
   }
 
   function poolId(uint256 odds, uint256 gameId) public view returns (uint256 id) {
@@ -76,13 +83,13 @@ contract Exchange is Ownable {
     bytes4 team2,
     bytes8 series,
     uint32 startTime
-  ) external onlyOwner {
+  ) external onlyOwner whenInitialized {
     require(startTime > block.timestamp, "Invalid Start");
     Game memory game = Game(team1, team2, series, startTime, startTime + 4 hours, false, false);
     games[++gameCounter] = game;
   }
 
-  function endGame(uint256 gameId, bool result) external onlyOwner {
+  function endGame(uint256 gameId, bool result) external onlyOwner whenInitialized {
     Game memory game = games[gameId];
     require(game.startTime != 0, "Game doesnt exist");
     require(game.endTime < block.timestamp, "Game in Progress");
@@ -95,7 +102,7 @@ contract Exchange is Ownable {
     uint256 odds,
     uint256 gameId,
     uint256 value
-  ) external {
+  ) external whenInitialized {
     Game memory game = games[gameId];
     require(game.startTime - block.timestamp <= 6 hours, "Bets not Open");
     uint256 pool = poolId(odds, gameId);
@@ -110,7 +117,7 @@ contract Exchange is Ownable {
     uint256 odds,
     uint256 gameId,
     uint256 value
-  ) external {
+  ) external whenInitialized {
     Game memory game = games[gameId];
     require(game.startTime - block.timestamp <= 6 hours, "Bets not Open");
     uint256 pool = poolId(odds, gameId);
@@ -118,11 +125,11 @@ contract Exchange is Ownable {
     require(coupon.totalSupply(makerId) - matchedValue[pool] >= value, "Not enough Market");
     takerBalance[pool] += value;
     matchedValue[pool] += value;
-    coupon.mint(address(this), takerId, value);
+    coupon.mint(msg.sender, takerId, value);
     cash.transferFrom(msg.sender, address(this), value);
   }
 
-  function redeem(uint256 tokenId, uint256 value) external {
+  function redeem(uint256 tokenId, uint256 value) external whenInitialized {
     uint256 tokenBalance = coupon.balanceOf(msg.sender, tokenId);
     require(tokenBalance >= value, "Low Balance");
     (uint256 side, uint256 odds, uint256 gameId) = tokenData(tokenId);
