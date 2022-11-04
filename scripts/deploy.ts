@@ -27,6 +27,8 @@ async function main() {
 	const initializeTx = await exchange.connect(deployer).initialize(coupon.address, cash.address);
 	initializeTx.wait();
 	console.log(`Initialize Exchange contract complete`);
+
+	// startGame: ["0x00494e44","0x00415553","0x0049434357433232","1667509980"]
 }
 
 main().catch((error) => {
