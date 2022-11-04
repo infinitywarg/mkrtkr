@@ -6,10 +6,10 @@ import "../interfaces/ICoupon.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 contract Exchange is Ownable {
-  uint16 private constant MAX_ODDS = 9999;
-  uint16 private constant MIN_ODDS = 1;
-  uint64 private constant MAX_VALUE = 10000000 * 1e6;
-  uint64 private constant MIN_VALUE = 10 * 1e6;
+  uint256 private constant MAX_ODDS = 9999;
+  uint256 private constant MIN_ODDS = 1;
+  uint256 private constant MAX_VALUE = 10000000 * 1e6;
+  uint256 private constant MIN_VALUE = 10 * 1e6;
   uint256 private constant BIT_PREFIX = 0;
   uint256 private constant BITMASK_POSITION = 2**8 - 1;
   uint256 private constant BITMASK_ODDS = 2**16 - 1;
@@ -30,21 +30,21 @@ contract Exchange is Ownable {
 
   ICoupon private coupon;
   IERC20 private cash;
-  uint64 public gameCounter;
+  uint256 public gameCounter;
 
   // from gameId
-  mapping(uint64 => Game) public games;
+  mapping(uint256 => Game) public games;
   // from poolId
-  mapping(uint256 => uint128) public makerBalance;
-  mapping(uint256 => uint128) public takerBalance;
-  mapping(uint256 => uint128) public matchedBalance;
+  mapping(uint256 => uint256) public makerBalance;
+  mapping(uint256 => uint256) public takerBalance;
+  mapping(uint256 => uint256) public matchedValue;
 
   function initialize(address _coupon, address _cash) external onlyOwner {
     coupon = ICoupon(_coupon);
     cash = IERC20(_cash);
   }
 
-  function poolId(uint16 odds, uint64 gameId) public view returns (uint256 id) {
+  function poolId(uint256 odds, uint256 gameId) public view returns (uint256 id) {
     require(odds <= MAX_ODDS && odds >= MIN_ODDS, "Invalid Odds");
     require(games[gameId].startTime != 0, "Invalid Game");
     id = (BIT_PREFIX << 240) | (uint256(odds) << 224) | (uint256(gameId) << 160) | uint256(uint160(address(this)));
@@ -60,15 +60,15 @@ contract Exchange is Ownable {
     public
     view
     returns (
-      uint8 position,
-      uint16 odds,
-      uint64 gameId
+      uint256 position,
+      uint256 odds,
+      uint256 gameId
     )
   {
     require(address(uint160(id & BITMASK_EXCHANGE)) == address(this), "Invalid Pool Id");
-    position = uint8((id & (BITMASK_POSITION << 240)) >> 240);
-    odds = uint16((id & (BITMASK_ODDS << 224)) >> 224);
-    gameId = uint64((id & (BITMASK_GAMEID << 160)) >> 160);
+    position = (id & (BITMASK_POSITION << 240)) >> 240;
+    odds = (id & (BITMASK_ODDS << 224)) >> 224;
+    gameId = (id & (BITMASK_GAMEID << 160)) >> 160;
   }
 
   function startGame(
@@ -79,64 +79,68 @@ contract Exchange is Ownable {
   ) external onlyOwner {
     require(startTime > block.timestamp, "Invalid Start");
     Game memory game = Game(team1, team2, series, startTime, startTime + 4 hours, false, false);
-    gameCounter++;
-    games[gameCounter] = game;
+    games[++gameCounter] = game;
   }
 
-  function endGame(uint64 gameId, bool result) external onlyOwner {
-    require(games[gameId].startTime != 0, "Game doesnt exist");
-    require(games[gameId].endTime < block.timestamp, "Game in Progress");
-    games[gameId].completed = true;
-    games[gameId].result = result;
+  function endGame(uint256 gameId, bool result) external onlyOwner {
+    Game memory game = games[gameId];
+    require(game.startTime != 0, "Game doesnt exist");
+    require(game.endTime < block.timestamp, "Game in Progress");
+    game.completed = true;
+    game.result = result;
+    games[gameId] = game;
   }
 
   function make(
-    uint16 odds,
-    uint64 gameId,
-    uint128 value
+    uint256 odds,
+    uint256 gameId,
+    uint256 value
   ) external {
-    require(games[gameId].startTime - block.timestamp <= 6 hours, "Bets not Open");
+    Game memory game = games[gameId];
+    require(game.startTime - block.timestamp <= 6 hours, "Bets not Open");
     uint256 pool = poolId(odds, gameId);
-    (uint256 makerId, uint256 takerId) = tokenIds(pool);
-    uint128 amount = (odds * value) / 1e2;
+    (uint256 makerId, ) = tokenIds(pool);
+    uint256 amount = (odds * value) / 1e2;
     makerBalance[pool] += amount;
     coupon.mint(msg.sender, makerId, value);
-    coupon.mint(address(this), takerId, value);
     cash.transferFrom(msg.sender, address(this), amount);
   }
 
   function take(
-    uint16 odds,
-    uint64 gameId,
-    uint128 value
+    uint256 odds,
+    uint256 gameId,
+    uint256 value
   ) external {
-    require(games[gameId].startTime - block.timestamp <= 6 hours, "Bets not Open");
+    Game memory game = games[gameId];
+    require(game.startTime - block.timestamp <= 6 hours, "Bets not Open");
     uint256 pool = poolId(odds, gameId);
-    (, uint256 takerId) = tokenIds(pool);
-    require(coupon.balanceOf(address(this), takerId) >= value, "Not enough Market");
-    uint128 amount = (odds * value) / 1e2;
+    (uint256 makerId, uint256 takerId) = tokenIds(pool);
+    require(coupon.totalSupply(makerId) - matchedValue[pool] >= value, "Not enough Market");
     takerBalance[pool] += value;
-    matchedBalance[pool] += amount;
-    coupon.safeTransferFrom(address(this), msg.sender, takerId, value, "");
+    matchedValue[pool] += value;
+    coupon.mint(address(this), takerId, value);
     cash.transferFrom(msg.sender, address(this), value);
   }
 
-  function redeem(uint256 tokenId, uint128 value) external {
+  function redeem(uint256 tokenId, uint256 value) external {
     uint256 tokenBalance = coupon.balanceOf(msg.sender, tokenId);
     require(tokenBalance >= value, "Low Balance");
-    (uint8 side, uint16 odds, uint64 gameId) = tokenData(tokenId);
-    require(!games[gameId].completed, "Game not Completed");
+    (uint256 side, uint256 odds, uint256 gameId) = tokenData(tokenId);
+    Game memory game = games[gameId];
+    require(!game.completed, "Game not Completed");
     uint256 pool = poolId(odds, gameId);
-    uint128 amount;
+    uint256 amount;
+    uint256 totalBalance = makerBalance[pool] + takerBalance[pool];
     if (side == 0) {
-      if (games[gameId].result) {
+      if (game.result) {
         // maker loses
-        uint128 makerRatio = uint128((value * 1e6) / coupon.totalSupply(tokenId));
-        amount = (makerBalance[pool] + takerBalance[pool] - matchedBalance[pool]) * makerRatio;
+        uint256 makerRatio = uint256((value * 1e6) / coupon.totalSupply(tokenId));
+        uint256 matchedBalance = (odds * matchedValue[pool]) / 1e2;
+        amount = (totalBalance - matchedBalance) * makerRatio;
       } else {
         // maker wins
-        uint128 makerRatio = uint128((value * 1e6) / coupon.totalSupply(tokenId));
-        amount = (makerBalance[pool] + takerBalance[pool]) * makerRatio;
+        uint256 makerRatio = uint256((value * 1e6) / coupon.totalSupply(tokenId));
+        amount = totalBalance * makerRatio;
       }
     } else {
       if (games[gameId].result) {
