@@ -1,5 +1,10 @@
-import { ethers } from "hardhat";
+import { ethers, network } from "hardhat";
 import { expect } from "chai";
+import { BigNumber } from "ethers";
+
+function formatUnits(balance: BigNumber): any {
+	return ethers.utils.formatUnits(balance, 6);
+}
 
 async function main() {
 	const [deployer, maker1, maker2, taker1, taker2, taker3] = await ethers.getSigners();
@@ -17,6 +22,8 @@ async function main() {
 	const TAKER1_VALUE_1 = ethers.utils.parseUnits("2900", 6);
 	const TAKER2_VALUE_1 = ethers.utils.parseUnits("3900", 6);
 	const TAKER3_VALUE_1 = ethers.utils.parseUnits("4900", 6);
+	const GAME_START_TIMESTAMP = Math.floor(Date.now() / 1000) + 7200;
+	const REDEEM_TIMESTAMP = GAME_START_TIMESTAMP + 21600;
 
 	const cash = await ethers.getContractAt("Cash", CASH_ADDRESS);
 	const coupon = await ethers.getContractAt("Coupon", COUPON_ADDRESS);
@@ -71,7 +78,7 @@ async function main() {
 			ethers.utils.toUtf8Bytes("IIND"),
 			ethers.utils.toUtf8Bytes("IAUS"),
 			ethers.utils.toUtf8Bytes("ICCWC-22"),
-			"1667569247"
+			GAME_START_TIMESTAMP
 		);
 	await startGameTx.wait(1);
 	console.log(await exchange.games(GAME1_ID));
@@ -84,53 +91,70 @@ async function main() {
 
 	makeTx = await exchange.connect(maker1).make(ODDS1, GAME1_ID, MAKER1_VALUE_1);
 	await makeTx.wait(1);
-	expect(ethers.utils.formatUnits(await exchange.makerBalance(poolId), 6)).to.equal("5824.0");
-	expect(await coupon.balanceOf(maker1.address, tokenIds.makerId)).to.equal(MAKER1_VALUE_1);
+	expect(formatUnits(await exchange.makerBalance(poolId))).to.equal(formatUnits(MAKER1_VALUE_1.mul(ODDS1).div("100")));
+	expect(formatUnits(await coupon.balanceOf(maker1.address, tokenIds.makerId))).to.equal(MAKER1_VALUE_1);
+	expect(formatUnits(await cash.balanceOf(exchange.address))).to.equal(MAKER1_VALUE_1.mul(ODDS1));
 	console.log(`maker1 made bet for value: ${MAKER1_VALUE_1}`);
 
 	makeTx = await exchange.connect(maker1).make(ODDS1, GAME1_ID, MAKER1_VALUE_2);
 	await makeTx.wait(1);
-	expect(ethers.utils.formatUnits(await exchange.makerBalance(poolId), 6)).to.equal("23842.0");
+	expect(formatUnits(await exchange.makerBalance(poolId))).to.equal("23842.0");
 	expect(await coupon.balanceOf(maker1.address, tokenIds.makerId)).to.equal(MAKER1_VALUE_1.add(MAKER1_VALUE_2));
+
 	console.log(`maker1 made bet for value: ${MAKER1_VALUE_2}`);
 
 	makeTx = await exchange.connect(maker2).make(ODDS1, GAME1_ID, MAKER2_VALUE_1);
 	await makeTx.wait(1);
-	expect(ethers.utils.formatUnits(await exchange.makerBalance(poolId), 6)).to.equal("32396.0");
+	expect(formatUnits(await exchange.makerBalance(poolId))).to.equal("32396.0");
 	expect(await coupon.balanceOf(maker2.address, tokenIds.makerId)).to.equal(MAKER2_VALUE_1);
+
 	console.log(`maker2 made bet for value: ${MAKER2_VALUE_1}`);
 
 	makeTx = await exchange.connect(maker2).make(ODDS1, GAME1_ID, MAKER2_VALUE_2);
 	await makeTx.wait(1);
-	expect(ethers.utils.formatUnits(await exchange.makerBalance(poolId), 6)).to.equal("36017.8");
+	expect(formatUnits(await exchange.makerBalance(poolId))).to.equal("36017.8");
 	expect(await coupon.balanceOf(maker2.address, tokenIds.makerId)).to.equal(MAKER2_VALUE_1.add(MAKER2_VALUE_2));
+
 	console.log(`maker2 made bet for value: ${MAKER2_VALUE_2}`);
 
 	let takeTx;
 	takeTx = await exchange.connect(taker1).take(ODDS1, GAME1_ID, TAKER1_VALUE_1);
 	await takeTx.wait(1);
-	console.log(await exchange.makerBalance(poolId));
-	console.log(await exchange.takerBalance(poolId));
-	console.log(await exchange.matchedValue(poolId));
+	expect(await exchange.takerBalance(poolId)).to.equal(TAKER1_VALUE_1);
+	expect(await exchange.matchedValue(poolId)).to.equal(TAKER1_VALUE_1);
 	expect(await coupon.balanceOf(taker1.address, tokenIds.takerId)).to.equal(TAKER1_VALUE_1);
+	console.log(`taker1 took bet for value: ${TAKER1_VALUE_1}`);
 
 	takeTx = await exchange.connect(taker2).take(ODDS1, GAME1_ID, TAKER2_VALUE_1);
 	await takeTx.wait(1);
-	console.log(await exchange.makerBalance(poolId));
-	console.log(await exchange.takerBalance(poolId));
-	console.log(await exchange.matchedValue(poolId));
+	expect(await exchange.takerBalance(poolId)).to.equal(TAKER1_VALUE_1.add(TAKER2_VALUE_1));
+	expect(await exchange.matchedValue(poolId)).to.equal(TAKER1_VALUE_1.add(TAKER2_VALUE_1));
 	expect(await coupon.balanceOf(taker2.address, tokenIds.takerId)).to.equal(TAKER2_VALUE_1);
+	console.log(`taker2 took bet for value: ${TAKER2_VALUE_1}`);
 
 	takeTx = await exchange.connect(taker3).take(ODDS1, GAME1_ID, TAKER3_VALUE_1);
 	await takeTx.wait(1);
-	console.log(await exchange.makerBalance(poolId));
-	console.log(await exchange.takerBalance(poolId));
-	console.log(await exchange.matchedValue(poolId));
+	expect(await exchange.takerBalance(poolId)).to.equal(TAKER1_VALUE_1.add(TAKER2_VALUE_1).add(TAKER3_VALUE_1));
+	expect(await exchange.matchedValue(poolId)).to.equal(TAKER1_VALUE_1.add(TAKER2_VALUE_1).add(TAKER3_VALUE_1));
 	expect(await coupon.balanceOf(taker3.address, tokenIds.takerId)).to.equal(TAKER3_VALUE_1);
+	console.log(`taker3 took bet for value: ${TAKER3_VALUE_1}`);
 
-	const endGameTx = await exchange.connect(deployer).endGame(GAME1_ID, true);
-	await endGameTx.wait(1);
-	console.log(await exchange.games(GAME1_ID));
+	await network.provider.send("evm_setNextBlockTimestamp", [REDEEM_TIMESTAMP]);
+	console.log(`Increased evm timestamp by 12 hours`);
+
+	// const endGameTx = await exchange.connect(deployer).endGame(GAME1_ID, true);
+	// await endGameTx.wait(1);
+	// console.log(await exchange.games(GAME1_ID));
+
+	// const previewRedeem = await exchange.previewRedeem(tokenIds.makerId, "1100000000", maker1.address);
+	// console.log(previewRedeem);
+
+	// const exchangeBalance = await cash.balanceOf(exchange.address);
+	// console.log(exchangeBalance);
+
+	// let reedeemTx;
+	// reedeemTx = await exchange.connect(maker1).redeem(tokenIds.makerId, "1100000000");
+	// await reedeemTx.wait(1);
 }
 
 main().catch((error) => {

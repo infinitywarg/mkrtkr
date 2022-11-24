@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0
 pragma solidity ^0.8.9;
 
-import "@openzeppelin/contracts/token/ERC1155/IERC1155Receiver.sol";
+interface IExchange {
+  function initialize(address _coupon, address _cash) external;
 
-interface IExchange is IERC1155Receiver {
   function startGame(
     bytes4 team1,
     bytes4 team2,

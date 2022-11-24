@@ -3,6 +3,7 @@ pragma solidity ^0.8.9;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "../interfaces/ICoupon.sol";
+import "../interfaces/IExchange.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 contract Exchange is Ownable {
@@ -107,7 +108,7 @@ contract Exchange is Ownable {
     require(game.startTime - block.timestamp <= 6 hours, "Bets not Open");
     uint256 pool = poolId(odds, gameId);
     (uint256 makerId, ) = tokenIds(pool);
-    uint256 amount = (odds * value) / 1e2;
+    uint256 amount = _makerAmountFromValue(odds, value);
     makerBalance[pool] += amount;
     coupon.mint(msg.sender, makerId, value);
     cash.transferFrom(msg.sender, address(this), amount);
@@ -130,32 +131,49 @@ contract Exchange is Ownable {
   }
 
   function redeem(uint256 tokenId, uint256 value) external whenInitialized {
-    uint256 tokenBalance = coupon.balanceOf(msg.sender, tokenId);
-    require(tokenBalance >= value, "Low Balance");
-    (uint256 side, uint256 odds, uint256 gameId) = tokenData(tokenId);
+    require(coupon.balanceOf(msg.sender, tokenId) >= value, "Low Balance");
+    uint256 amount = previewRedeem(tokenId, value, msg.sender);
+    cash.transfer(msg.sender, amount);
+    coupon.burn(msg.sender, tokenId, value);
+  }
+
+  function _makerAmountFromValue(uint256 odds, uint256 value) private pure returns (uint256 amount) {
+    unchecked {
+      amount = (odds * value) / 1e2;
+    }
+  }
+
+  function _makerRatio(uint256 tokenId, address maker) private view returns (uint256 ratio) {
+    unchecked {
+      ratio = (coupon.balanceOf(maker, tokenId) * 1e6) / coupon.totalSupply(tokenId);
+    }
+  }
+
+  function previewRedeem(
+    uint256 tokenId,
+    uint256 value,
+    address player
+  ) public view returns (uint256 amount) {
+    (uint256 position, uint256 odds, uint256 gameId) = tokenData(tokenId);
     Game memory game = games[gameId];
-    require(!game.completed, "Game not Completed");
+    require(game.completed, "Game not Completed");
     uint256 pool = poolId(odds, gameId);
-    uint256 amount;
     uint256 totalBalance = makerBalance[pool] + takerBalance[pool];
-    if (side == 0) {
+    if (position == 0) {
+      uint256 makerRatio = _makerRatio(tokenId, player);
       if (game.result) {
         // maker loses
-        uint256 makerRatio = uint256((value * 1e6) / coupon.totalSupply(tokenId));
-        uint256 matchedBalance = (odds * matchedValue[pool]) / 1e2;
+        uint256 matchedBalance = _makerAmountFromValue(odds, matchedValue[pool]);
         amount = (totalBalance - matchedBalance) * makerRatio;
       } else {
         // maker wins
-        uint256 makerRatio = uint256((value * 1e6) / coupon.totalSupply(tokenId));
         amount = totalBalance * makerRatio;
       }
     } else {
       if (games[gameId].result) {
         // taker wins
-        amount = (odds * value) / 1e2;
+        amount = _makerAmountFromValue(odds, value);
       }
     }
-    cash.transfer(msg.sender, amount);
-    coupon.burn(msg.sender, tokenId, value);
   }
 }
